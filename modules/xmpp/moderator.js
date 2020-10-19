@@ -157,7 +157,7 @@ Moderator.prototype.createConferenceIq = function() {
         'machine-uid': machineUID
     });
 
-    if (sessionId) {
+    if (window.sessionStorage.getItem('participantType') !== 'guest' && sessionId) {
         elem.attrs({ 'session-id': sessionId });
     }
     if (this.options.connection.enforcedBridge !== undefined) {
@@ -455,6 +455,22 @@ Moderator.prototype._allocateConferenceFocusError = function(error, callback) {
 
         return;
     }
+
+    // Not authorized to host the room
+    if ($(error).find('>error[by="host-not-authorized"]').length) {
+        logger.warn('Unauthorized to host the conference', error);
+        const toDomain = Strophe.getDomainFromJid(error.getAttribute('to'));
+
+        if (toDomain !== this.options.connection.hosts.anonymousdomain) {
+            // FIXME "is external" should come either from the focus or
+            // config.js
+            this.externalAuthEnabled = true;
+        }
+        this.eventEmitter.emit(XMPPEvents.MUC_HOST_NOT_AUTHORIZED);
+
+        return;
+    }
+
     const waitMs = this.getNextErrorTimeout();
     const errmsg = `Focus error, retry after ${waitMs}`;
 
