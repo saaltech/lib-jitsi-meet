@@ -1,7 +1,7 @@
 {
   "name": "lib-jitsi-meet",
-  "version": "0.0.0",
-  "description": "JS library for accessing Jitsi server side deployments",
+  "version": "0.0.5",
+  "description": "v2 - JS library for accessing Jitsi server side deployments",
   "repository": {
     "type": "git",
     "url": "git://github.com/jitsi/lib-jitsi-meet"

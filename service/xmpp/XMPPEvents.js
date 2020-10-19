@@ -143,6 +143,9 @@ const XMPPEvents = {
     // Designates an event indicating that a participant was denied access to a conference from the lobby XMPP MUC.
     MUC_DENIED_ACCESS: 'xmpp.muc_denied access',
 
+    // Designates an event indicating that a host was denied access to a conference from the lobby XMPP MUC.
+    MUC_HOST_NOT_AUTHORIZED: 'xmpp.muc_host_not_authorized',
+
     // Designates an event indicating that local participant left the muc
     MUC_LEFT: 'xmpp.muc_left',
 

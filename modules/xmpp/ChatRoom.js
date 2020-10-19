@@ -540,6 +540,9 @@ export default class ChatRoom extends Listenable {
             }
         }
 
+        // Setting owner indication for webapp
+        window.sessionStorage.setItem('isOwner', member.affiliation === 'owner');
+
         if (from === this.myroomjid) {
             const newRole
                 = member.affiliation === 'owner' ? member.role : 'none';

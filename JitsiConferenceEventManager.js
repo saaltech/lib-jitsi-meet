@@ -296,6 +296,9 @@ JitsiConferenceEventManager.prototype.setupChatRoomListeners = function() {
     this.chatRoomForwarder.forward(XMPPEvents.MUC_DENIED_ACCESS,
         JitsiConferenceEvents.CONFERENCE_FAILED,
         JitsiConferenceErrors.CONFERENCE_ACCESS_DENIED);
+    this.chatRoomForwarder.forward(XMPPEvents.MUC_HOST_NOT_AUTHORIZED,
+        JitsiConferenceEvents.CONFERENCE_FAILED,
+        JitsiConferenceErrors.CONFERENCE_HOST_NOT_AUTHORIZED);
 
     chatRoom.addListener(XMPPEvents.DISPLAY_NAME_CHANGED,
         conference.onDisplayNameChanged.bind(conference));
