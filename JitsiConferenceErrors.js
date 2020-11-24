@@ -46,6 +46,13 @@ export const MEMBERS_ONLY_ERROR = 'conference.connectionError.membersOnly';
 export const CONFERENCE_ACCESS_DENIED = 'conference.connectionError.accessDenied';
 
 /**
+ * Indicates that error is due to denied permission to be the host of the room,
+ * occurred trying to use a different host credentials to host the room from the original host.
+ */
+export const CONFERENCE_HOST_NOT_AUTHORIZED = 'conference.connectionError.hostNotAuthorized';
+
+
+/**
  * Indicates that focus error happened.
  */
 export const FOCUS_DISCONNECTED = 'conference.focusDisconnected';
