@@ -7,6 +7,8 @@ module.exports = [
         entry: {
             'lib-jitsi-meet': './index.js'
         },
+        devtool: 'hidden-source-map',
+        mode: 'production',
         output: Object.assign({}, config.output, {
             library: 'JitsiMeetJS',
             libraryTarget: 'umd'
