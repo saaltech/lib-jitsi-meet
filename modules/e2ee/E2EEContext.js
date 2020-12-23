@@ -28,7 +28,7 @@ export default class E2EEcontext {
         // Determine the URL for the worker script. Relative URLs are relative to
         // the entry point, not the script that launches the worker.
         let baseUrl = '';
-        const ljm = document.querySelector('script[src*="lib-jitsi-meet"]');
+        const ljm = document.querySelector('script[src*="lib-jifmeet"]');
 
         if (ljm) {
             const idx = ljm.src.lastIndexOf('/');
@@ -38,7 +38,7 @@ export default class E2EEcontext {
 
         // Initialize the E2EE worker. In order to avoid CORS issues, start the worker and have it
         // synchronously load the JS.
-        const workerUrl = `${baseUrl}lib-jitsi-meet.e2ee-worker.js`;
+        const workerUrl = `${baseUrl}lib-jifmeet.e2ee-worker.js`;
         const workerBlob
             = new Blob([ `importScripts("${workerUrl}");` ], { type: 'application/javascript' });
         const blobUrl = window.URL.createObjectURL(workerBlob);
