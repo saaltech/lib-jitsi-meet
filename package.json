@@ -1,20 +1,15 @@
 {
-  "name": "lib-jitsi-meet",
-  "version": "0.0.9",
-  "description": "v2 - JS library for accessing Jitsi server side deployments",
-  "repository": {
-    "type": "git",
-    "url": "git://github.com/jitsi/lib-jitsi-meet"
-  },
+  "name": "lib-jifmeet",
+  "version": "0.0.11",
+  "description": "v2 - JS library for accessing Jifmeet server side deployments",
   "keywords": [
     "jingle",
     "webrtc",
     "xmpp",
     "browser",
-    "jitsi"
+    "jifmeet"
   ],
   "author": "",
-  "readmeFilename": "README.md",
   "dependencies": {
     "@jitsi/js-utils": "1.0.2",
     "@jitsi/sdp-interop": "1.0.3",

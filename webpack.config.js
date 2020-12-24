@@ -5,12 +5,12 @@ const config = require('./webpack-shared-config');
 module.exports = [
     Object.assign({}, config, {
         entry: {
-            'lib-jitsi-meet': './index.js'
+            'lib-jifmeet': './index.js'
         },
         devtool: 'hidden-source-map',
         mode: 'production',
         output: Object.assign({}, config.output, {
-            library: 'JitsiMeetJS',
+            library: 'JifMeetJS',
             libraryTarget: 'umd'
         })
     }),
@@ -20,7 +20,7 @@ module.exports = [
         },
         mode: 'production',
         output: {
-            filename: 'lib-jitsi-meet.e2ee-worker.js',
+            filename: 'lib-jifmeet.e2ee-worker.js',
             path: process.cwd()
         },
         optimization: {
