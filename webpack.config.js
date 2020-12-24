@@ -10,7 +10,7 @@ module.exports = [
         devtool: 'hidden-source-map',
         mode: 'production',
         output: Object.assign({}, config.output, {
-            library: 'JitsiMeetJS',
+            library: 'JifMeetJS',
             libraryTarget: 'umd'
         })
     }),
