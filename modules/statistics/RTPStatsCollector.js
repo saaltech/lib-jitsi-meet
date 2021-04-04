@@ -56,6 +56,18 @@ KEYS_BY_BROWSER_TYPE[browsers.CHROME] = {
     'port': 'port',
     'protocol': 'protocol'
 };
+KEYS_BY_BROWSER_TYPE[browsers.REACT_NATIVE] = {
+    'packetsReceived': 'packetsReceived',
+    'packetsSent': 'packetsSent',
+    'bytesReceived': 'bytesReceived',
+    'bytesSent': 'bytesSent',
+    'frameWidth': 'frameWidth',
+    'frameHeight': 'frameHeight',
+    'framesPerSecond': 'framesPerSecond',
+    'ip': 'ip',
+    'port': 'port',
+    'protocol': 'protocol'
+};
 KEYS_BY_BROWSER_TYPE[browsers.OPERA]
     = KEYS_BY_BROWSER_TYPE[browsers.CHROME];
 KEYS_BY_BROWSER_TYPE[browsers.NWJS]
@@ -63,8 +75,6 @@ KEYS_BY_BROWSER_TYPE[browsers.NWJS]
 KEYS_BY_BROWSER_TYPE[browsers.ELECTRON]
     = KEYS_BY_BROWSER_TYPE[browsers.CHROME];
 KEYS_BY_BROWSER_TYPE[browsers.SAFARI]
-    = KEYS_BY_BROWSER_TYPE[browsers.CHROME];
-KEYS_BY_BROWSER_TYPE[browsers.REACT_NATIVE]
     = KEYS_BY_BROWSER_TYPE[browsers.CHROME];
 
 /**
@@ -214,8 +224,7 @@ export default function StatsCollector(
     const keys = KEYS_BY_BROWSER_TYPE[this._browserType];
 
     if (!keys) {
-        // eslint-disable-next-line no-throw-literal
-        throw `The browser type '${this._browserType}' isn't supported!`;
+        throw new Error(`The browser type '${this._browserType}' isn't supported!`);
     }
 
     /**
@@ -223,7 +232,7 @@ export default function StatsCollector(
      * @type {boolean}
      */
     this._usesPromiseGetStats
-        = browser.isSafari() || browser.isFirefox();
+        = browser.isWebKitBased() || browser.isFirefox() || browser.isReactNative();
 
     /**
      * The function which is to be used to retrieve the value associated in a
@@ -251,6 +260,7 @@ export default function StatsCollector(
     // Updates stats interval
     this.audioLevelsIntervalMilis = audioLevelsInterval;
 
+    this.speakerList = [];
     this.statsIntervalId = null;
     this.statsIntervalMilis = statsInterval;
 
@@ -261,7 +271,15 @@ export default function StatsCollector(
     this.ssrc2stats = new Map();
 }
 
-/* eslint-enable max-params */
+/**
+ * Set the list of the remote speakers for which audio levels are to be calculated.
+ *
+ * @param {Array<string>} speakerList - Endpoint ids.
+ * @returns {void}
+ */
+StatsCollector.prototype.setSpeakerList = function(speakerList) {
+    this.speakerList = speakerList;
+};
 
 /**
  * Stops stats updates.
@@ -299,7 +317,7 @@ StatsCollector.prototype.start = function(startAudioLevelStats) {
         this.audioLevelsIntervalId = setInterval(
             () => {
                 if (browser.supportsReceiverStats()) {
-                    const audioLevels = this.peerconnection.getAudioLevels();
+                    const audioLevels = this.peerconnection.getAudioLevels(this.speakerList);
 
                     for (const ssrc in audioLevels) {
                         if (audioLevels.hasOwnProperty(ssrc)) {
@@ -345,41 +363,41 @@ StatsCollector.prototype.start = function(startAudioLevelStats) {
         );
     }
 
-    this.statsIntervalId = setInterval(
-        () => {
-            // Interval updates
-            this.peerconnection.getStats(
-                report => {
-                    let results = null;
+    const processStats = () => {
+        // Interval updates
+        this.peerconnection.getStats(
+            report => {
+                let results = null;
 
-                    if (!report || !report.result
-                        || typeof report.result !== 'function') {
-                        // firefox
-                        results = report;
+                if (!report || !report.result
+                    || typeof report.result !== 'function') {
+                    // firefox
+                    results = report;
+                } else {
+                    // chrome
+                    results = report.result();
+                }
+
+                this.currentStatsReport = results;
+                try {
+                    if (this._usesPromiseGetStats) {
+                        this.processNewStatsReport();
                     } else {
-                        // chrome
-                        results = report.result();
+                        this.processStatsReport();
                     }
+                } catch (e) {
+                    GlobalOnErrorHandler.callErrorHandler(e);
+                    logger.error(`Unsupported key:${e}`, e);
+                }
 
-                    this.currentStatsReport = results;
-                    try {
-                        if (this._usesPromiseGetStats) {
-                            this.processNewStatsReport();
-                        } else {
-                            this.processStatsReport();
-                        }
-                    } catch (e) {
-                        GlobalOnErrorHandler.callErrorHandler(e);
-                        logger.error(`Unsupported key:${e}`, e);
-                    }
+                this.previousStatsReport = this.currentStatsReport;
+            },
+            error => this.errorCallback(error)
+        );
+    };
 
-                    this.previousStatsReport = this.currentStatsReport;
-                },
-                error => this.errorCallback(error)
-            );
-        },
-        this.statsIntervalMilis
-    );
+    processStats();
+    this.statsIntervalId = setInterval(processStats, this.statsIntervalMilis);
 };
 
 /**
@@ -401,8 +419,7 @@ StatsCollector.prototype._defineGetStatValueMethod = function(keys) {
             return key;
         }
 
-        // eslint-disable-next-line no-throw-literal
-        throw `The property '${name}' isn't supported!`;
+        throw new Error(`The property '${name}' isn't supported!`);
     };
 
     // Define the function which retrieves the value from a specific report
@@ -423,27 +440,6 @@ StatsCollector.prototype._defineGetStatValueMethod = function(keys) {
         // likely that whoever defined it wanted you to call it in order to
         // retrieve the value associated with a specific key.
         itemStatByKey = (item, key) => item.stat(key);
-        break;
-    case browsers.REACT_NATIVE:
-        // The implementation provided by react-native-webrtc follows the
-        // Objective-C WebRTC API: RTCStatsReport has a values property of type
-        // Array in which each element is a key-value pair.
-        itemStatByKey = function(item, key) {
-            let value;
-
-            item.values.some(pair => {
-                if (pair.hasOwnProperty(key)) {
-                    value = pair[key];
-
-                    return true;
-                }
-
-                return false;
-
-            });
-
-            return value;
-        };
         break;
     default:
         itemStatByKey = (item, key) => item[key];
@@ -759,10 +755,10 @@ StatsCollector.prototype._processAndEmitReport = function() {
     const codecs = {};
     let audioBitrateDownload = 0;
     let audioBitrateUpload = 0;
-    let audioCodec = '';
+    let audioCodec;
     let videoBitrateDownload = 0;
     let videoBitrateUpload = 0;
-    let videoCodec = '';
+    let videoCodec;
 
     for (const [ ssrc, ssrcStats ] of this.ssrc2stats) {
         // process packet loss stats
@@ -810,7 +806,7 @@ StatsCollector.prototype._processAndEmitReport = function() {
                     userFramerates[ssrc] = ssrcStats.framerate;
                     framerates[participantId] = userFramerates;
                 }
-                if (audioCodec.length && videoCodec.length) {
+                if (audioCodec && videoCodec) {
                     const codecDesc = {
                         'audio': audioCodec,
                         'video': videoCodec
@@ -1016,8 +1012,7 @@ StatsCollector.prototype._defineNewGetStatValueMethod = function(keys) {
             return key;
         }
 
-        // eslint-disable-next-line no-throw-literal
-        throw `The property '${name}' isn't supported!`;
+        throw new Error(`The property '${name}' isn't supported!`);
     };
 
     // Compose the 2 functions defined above to get a function which retrieves
@@ -1191,6 +1186,31 @@ StatsCollector.prototype.processNewStatsReport = function() {
                 isDownloadStream
             });
 
+            const resolution = {
+                height: null,
+                width: null
+            };
+
+            try {
+                resolution.height = getStatValue(now, 'frameHeight');
+                resolution.width = getStatValue(now, 'frameWidth');
+            } catch (e) { /* not supported*/ }
+
+            // Tries to get frame rate
+            let frameRate;
+
+            try {
+                frameRate = getStatValue(now, 'framesPerSecond');
+            } catch (err) { /* not supported*/ }
+
+            ssrcStats.setFramerate(Math.round(frameRate || 0));
+
+            if (resolution.height && resolution.width) {
+                ssrcStats.setResolution(resolution);
+            } else {
+                ssrcStats.setResolution(null);
+            }
+
             if (now.type === 'inbound-rtp') {
 
                 ssrcStats.addBitrate({
@@ -1222,6 +1242,25 @@ StatsCollector.prototype.processNewStatsReport = function() {
 
             if (framerateMean) {
                 ssrcStats.setFramerate(Math.round(framerateMean || 0));
+            }
+
+
+            let codec;
+
+            // Try to get the codec for later reporting.
+            try {
+                codec = this.currentStatsReport.get(now.codecId);
+            } catch (e) { /* not supported*/ }
+
+            if (codec) {
+                /**
+                 * The mime type has the following form: video/VP8 or audio/ISAC,
+                 * so we what to keep just the type after the '/', audio and video
+                 * keys will be added on the processing side.
+                 */
+                const codecShortType = codec.mimeType.split('/')[1];
+
+                codecShortType && ssrcStats.setCodec(codecShortType);
             }
 
         // track for resolution
