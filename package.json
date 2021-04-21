@@ -1,7 +1,7 @@
 {
   "name": "lib-jifmeet",
-  "version": "0.1.0",
-  "description": "v2 - JS library for accessing Jifmeet server side deployments",
+  "version": "0.1.1",
+  "description": "v2(21th April 2021) - JS library for accessing Jifmeet server side deployments",
   "keywords": [
     "jingle",
     "webrtc",
