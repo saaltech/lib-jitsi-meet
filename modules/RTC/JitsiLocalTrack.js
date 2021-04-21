@@ -352,7 +352,7 @@ export default class JitsiLocalTrack extends JitsiTrack {
             this._streamEffect.stopEffect();
             this._setStream(this._originalStream);
             this._originalStream = null;
-            this.track = this.stream.getTracks()[0];
+            this.track = this.stream ? this.stream.getTracks()[0] : null;
         }
     }
 
@@ -402,6 +402,9 @@ export default class JitsiLocalTrack extends JitsiTrack {
 
         if (!conference) {
             this._switchStreamEffect(effect);
+            if (this.isVideoTrack()) {
+                this.containers.forEach(cont => RTCUtils.attachMediaStream(cont, this.stream));
+            }
 
             return Promise.resolve();
         }
@@ -681,12 +684,16 @@ export default class JitsiLocalTrack extends JitsiTrack {
      * @returns {Promise}
      */
     dispose() {
-        this._switchStreamEffect();
-
         let promise = Promise.resolve();
 
+        // Remove the effect instead of stopping it so that the original stream is restored
+        // on both the local track and on the peerconnection.
+        if (this._streamEffect) {
+            promise = this.setEffect();
+        }
+
         if (this.conference) {
-            promise = this.conference.removeTrack(this);
+            promise = promise.then(() => this.conference.removeTrack(this));
         }
 
         if (this.stream) {

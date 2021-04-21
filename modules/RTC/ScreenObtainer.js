@@ -163,9 +163,17 @@ const ScreenObtainer = {
             getDisplayMedia = navigator.mediaDevices.getDisplayMedia.bind(navigator.mediaDevices);
         }
 
+        const { audioQuality } = this.options;
+        const audio = audioQuality?.stereo ? {
+            autoGainControl: false,
+            channelCount: 2,
+            echoCancellation: false,
+            noiseSuppression: false
+        } : true;
+
         getDisplayMedia({
             video: true,
-            audio: true,
+            audio,
             cursor: 'always'
         })
             .then(stream => {
