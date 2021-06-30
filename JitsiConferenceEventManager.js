@@ -272,8 +272,8 @@ JitsiConferenceEventManager.prototype.setupChatRoomListeners = function() {
         (session, jid) => {
 
             if (jid) {
-                const participant = conference.getParticipantById(
-                    Strophe.getResourceFromJid(jid));
+                const resource = Strophe.getResourceFromJid(jid);
+                const participant = conference.getParticipantById(resource) || resource;
 
                 if (session.getStatus() === 'off') {
                     session.setTerminator(participant);
@@ -381,19 +381,19 @@ JitsiConferenceEventManager.prototype.setupChatRoomListeners = function() {
         XMPPEvents.MESSAGE_RECEIVED,
 
         // eslint-disable-next-line max-params
-        (jid, displayName, txt, myJid, ts) => {
+        (jid, txt, myJid, ts) => {
             const id = Strophe.getResourceFromJid(jid);
 
             conference.eventEmitter.emit(
                 JitsiConferenceEvents.MESSAGE_RECEIVED,
-                id, txt, ts, displayName);
+                id, txt, ts);
         });
 
     chatRoom.addListener(
         XMPPEvents.PRIVATE_MESSAGE_RECEIVED,
 
         // eslint-disable-next-line max-params
-        (jid, displayName, txt, myJid, ts) => {
+        (jid, txt, myJid, ts) => {
             const id = Strophe.getResourceFromJid(jid);
 
             conference.eventEmitter.emit(
@@ -702,6 +702,30 @@ JitsiConferenceEventManager.prototype.setupXMPPListeners = function() {
         createdTimestamp => {
             conference.eventEmitter.emit(JitsiConferenceEvents.CONFERENCE_CREATED_TIMESTAMP, createdTimestamp);
         });
+
+    this._addConferenceXMPPListener(XMPPEvents.AV_MODERATION_CHANGED,
+        (value, mediaType, actorJid) => {
+            const actorParticipant = conference.getParticipants().find(p => p.getJid() === actorJid);
+
+            conference.eventEmitter.emit(JitsiConferenceEvents.AV_MODERATION_CHANGED, {
+                enabled: value,
+                mediaType,
+                actor: actorParticipant
+            });
+        });
+    this._addConferenceXMPPListener(XMPPEvents.AV_MODERATION_PARTICIPANT_APPROVED,
+        (mediaType, jid) => {
+            const participant = conference.getParticipantById(Strophe.getResourceFromJid(jid));
+
+            if (participant) {
+                conference.eventEmitter.emit(JitsiConferenceEvents.AV_MODERATION_PARTICIPANT_APPROVED, {
+                    participant,
+                    mediaType
+                });
+            }
+        });
+    this._addConferenceXMPPListener(XMPPEvents.AV_MODERATION_APPROVED,
+        value => conference.eventEmitter.emit(JitsiConferenceEvents.AV_MODERATION_APPROVED, { mediaType: value }));
 };
 
 /**
