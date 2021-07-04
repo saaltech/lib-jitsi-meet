@@ -82,7 +82,7 @@ export class OlmAdapter extends Listenable {
      */
     async initSessions() {
         if (this._sessionInitialization) {
-            throw new Error('OlmAdapte initSessions called multiple times');
+            throw new Error('OlmAdapter initSessions called multiple times');
         } else {
             this._sessionInitialization = new Deferred();
 
@@ -183,6 +183,30 @@ export class OlmAdapter extends Listenable {
         this._key = key;
 
         return this._keyIndex;
+    }
+
+    /**
+     * Frees the olmData session for the given participant.
+     *
+     */
+    clearParticipantSession(participant) {
+        const olmData = this._getParticipantOlmData(participant);
+
+        if (olmData.session) {
+            olmData.session.free();
+            olmData.session = undefined;
+        }
+    }
+
+
+    /**
+     * Frees the olmData sessions for all participants.
+     *
+     */
+    clearAllParticipantsSessions() {
+        for (const participant of this._conf.getParticipants()) {
+            this.clearParticipantSession(participant);
+        }
     }
 
     /**
@@ -440,12 +464,7 @@ export class OlmAdapter extends Listenable {
     _onParticipantLeft(id, participant) {
         logger.debug(`Participant ${id} left`);
 
-        const olmData = this._getParticipantOlmData(participant);
-
-        if (olmData.session) {
-            olmData.session.free();
-            olmData.session = undefined;
-        }
+        this.clearParticipantSession(participant);
     }
 
     /**
