@@ -1,6 +1,6 @@
 {
   "name": "lib-jifmeet",
-  "version": "0.1.5",
+  "version": "0.1.51",
   "description": "v2(14th July 2021) - JS library for accessing Jifmeet server side deployments",
   "keywords": [
     "jingle",
