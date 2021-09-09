@@ -5,16 +5,12 @@ import { b64_sha1, Strophe } from 'strophe.js'; // eslint-disable-line camelcase
 import XMPPEvents from '../../service/xmpp/XMPPEvents';
 import Listenable from '../util/Listenable';
 
-const logger = require('jitsi-meet-logger').getLogger(__filename);
-
 /**
  * The property
  */
 const IDENTITY_PROPERTIES = [ 'category', 'type', 'lang', 'name' ];
 const IDENTITY_PROPERTIES_FOR_COMPARE = [ 'category', 'type', 'lang' ];
 const HASH = 'sha-1';
-
-export const ERROR_FEATURE_VERSION_MISMATCH = 'Feature version mismatch';
 
 /**
  *
@@ -55,6 +51,30 @@ function generateSha(identities, features) {
 }
 
 /**
+ * Parses the disco-info node and returns the sets of features and identities.
+ * @param {String} node The node with results to parse.
+ * @returns {{features: Set<any>, identities: Set<any>}}
+ */
+export function parseDiscoInfo(node) {
+    const features = new Set();
+    const identities = new Set();
+
+    $(node).find('>query>feature')
+        .each((_, el) => features.add(el.getAttribute('var')));
+    $(node).find('>query>identity')
+        .each((_, el) => identities.add({
+            type: el.getAttribute('type'),
+            name: el.getAttribute('name'),
+            category: el.getAttribute('category')
+        }));
+
+    return {
+        features,
+        identities
+    };
+}
+
+/**
  * Implements xep-0115 ( http://xmpp.org/extensions/xep-0115.html )
  */
 export default class Caps extends Listenable {
@@ -74,10 +94,12 @@ export default class Caps extends Listenable {
                 + '(disco plugin is required)!');
         }
 
-        this.versionToCapabilities = Object.create(null);
-        this.jidToVersion = Object.create(null);
         this.version = '';
         this.rooms = new Set();
+
+        // We keep track of features added outside the library and we publish them
+        // in the presence of the participant for simplicity, avoiding the disco info request-response.
+        this.externalFeatures = new Set();
 
         const emuc = connection.emuc;
 
@@ -91,9 +113,6 @@ export default class Caps extends Listenable {
 
         Strophe.addNamespace('CAPS', 'http://jabber.org/protocol/caps');
         this.disco.addFeature(Strophe.NS.CAPS);
-        connection.addHandler(this._handleCaps.bind(this), Strophe.NS.CAPS);
-
-        this._onMucMemberLeft = this._removeJidToVersionEntry.bind(this);
     }
 
     /**
@@ -102,10 +121,19 @@ export default class Caps extends Listenable {
      * @param {String} feature the name of the feature.
      * @param {boolean} submit if true - new presence with updated "c" node
      * will be sent.
+     * @param {boolean} external whether this feature was added externally to the library.
+     * We put features used directly by the clients (is jibri, remote-control enabled etc.) in the presence
+     * to avoid additional disco-info queries by those clients.
      */
-    addFeature(feature, submit = false) {
+    addFeature(feature, submit = false, external = false) {
         this.disco.addFeature(feature);
         this._generateVersion();
+
+        if (external && !this.externalFeatures.has(feature)) {
+            this.externalFeatures.add(feature);
+            this.rooms.forEach(room => this._updateRoomWithExternalFeatures(room));
+        }
+
         if (submit) {
             this.submit();
         }
@@ -117,10 +145,17 @@ export default class Caps extends Listenable {
      * @param {String} feature the name of the feature.
      * @param {boolean} submit if true - new presence with updated "c" node
      * will be sent.
+     * @param {boolean} external whether this feature was added externally to the library.
      */
-    removeFeature(feature, submit = false) {
+    removeFeature(feature, submit = false, external = false) {
         this.disco.removeFeature(feature);
         this._generateVersion();
+
+        if (external && this.externalFeatures.has(feature)) {
+            this.externalFeatures.delete(feature);
+            this.rooms.forEach(room => this._updateRoomWithExternalFeatures(room));
+        }
+
         if (submit) {
             this.submit();
         }
@@ -134,49 +169,25 @@ export default class Caps extends Listenable {
     }
 
     /**
-     * Returns a set with the features for a participant.
-     * @param {String} jid the jid of the participant
-     * @param {int} timeout the timeout in ms for reply from the participant.
-     * @returns {Promise<Set<String>, Error>}
+     * Updates the presences in the room based on the current values in externalFeatures.
+     * @param {ChatRoom} room the room to update.
+     * @private
      */
-    getFeatures(jid, timeout = 5000) {
-        const user
-            = jid in this.jidToVersion ? this.jidToVersion[jid] : null;
+    _updateRoomWithExternalFeatures(room) {
+        if (this.externalFeatures.size === 0) {
+            room.removeFromPresence('features');
+        } else {
+            const children = [];
 
-        if (!user || !(user.version in this.versionToCapabilities)) {
-            const node = user ? `${user.node}#${user.version}` : null;
-
-            return this._getDiscoInfo(jid, node, timeout)
-                .then(({ features, identities }) => {
-                    if (user) {
-                        const sha = generateSha(
-                            Array.from(identities),
-                            Array.from(features)
-                        );
-                        const receivedNode = `${user.node}#${sha}`;
-
-                        if (receivedNode === node) {
-                            this.versionToCapabilities[receivedNode] = features;
-
-                            return features;
-                        }
-
-                        // Check once if it has been cached asynchronously.
-                        if (this.versionToCapabilities[receivedNode]) {
-                            return this.versionToCapabilities[receivedNode];
-                        }
-
-                        logger.error(`Expected node ${node} but received ${
-                            receivedNode}`);
-
-                        return Promise.reject(ERROR_FEATURE_VERSION_MISMATCH);
-                    }
-
-                    return features;
+            this.externalFeatures.forEach(f => {
+                children.push({
+                    'tagName': 'feature',
+                    attributes: { 'var': f }
                 });
-        }
+            });
 
-        return Promise.resolve(this.versionToCapabilities[user.version]);
+            room.addOrReplaceInPresence('features', { children });
+        }
     }
 
     /**
@@ -200,24 +211,7 @@ export default class Caps extends Listenable {
     _getDiscoInfo(jid, node, timeout) {
         return new Promise((resolve, reject) =>
             this.disco.info(jid, node, response => {
-                const features = new Set();
-                const identities = new Set();
-
-                $(response)
-                    .find('>query>feature')
-                    .each(
-                        (_, el) => features.add(el.getAttribute('var')));
-                $(response)
-                    .find('>query>identity')
-                    .each(
-                        (_, el) => identities.add({
-                            type: el.getAttribute('type'),
-                            name: el.getAttribute('name'),
-                            category: el.getAttribute('category')
-                        }));
-                resolve({
-                    features,
-                    identities });
+                resolve(parseDiscoInfo(response));
             }, reject, timeout)
         );
     }
@@ -229,8 +223,9 @@ export default class Caps extends Listenable {
      */
     _addChatRoom(room) {
         this.rooms.add(room);
-        room.addListener(XMPPEvents.MUC_MEMBER_LEFT, this._onMucMemberLeft);
         this._fixChatRoomPresenceMap(room);
+
+        this._updateRoomWithExternalFeatures(room);
     }
 
     /**
@@ -240,7 +235,6 @@ export default class Caps extends Listenable {
      */
     _removeChatRoom(room) {
         this.rooms.delete(room);
-        room.removeListener(XMPPEvents.MUC_MEMBER_LEFT, this._onMucMemberLeft);
     }
 
     /**
@@ -248,7 +242,7 @@ export default class Caps extends Listenable {
      * @param {ChatRoom} room the room.
      */
     _fixChatRoomPresenceMap(room) {
-        room.addToPresence('c', {
+        room.addOrReplaceInPresence('c', {
             attributes: {
                 xmlns: Strophe.NS.CAPS,
                 hash: HASH,
@@ -274,37 +268,5 @@ export default class Caps extends Listenable {
             = generateSha(this.disco._identities, this.disco._features);
 
         this._notifyVersionChanged();
-    }
-
-    /**
-     * Parses the "c" xml node from presence.
-     * @param {DOMElement} stanza the presence packet
-     */
-    _handleCaps(stanza) {
-        const from = stanza.getAttribute('from');
-        const caps = stanza.querySelector('c');
-        const version = caps.getAttribute('ver');
-        const node = caps.getAttribute('node');
-        const oldVersion = this.jidToVersion[from];
-
-        this.jidToVersion[from] = { version,
-            node };
-        if (oldVersion && oldVersion.version !== version) {
-            this.eventEmitter.emit(XMPPEvents.PARTCIPANT_FEATURES_CHANGED,
-                from);
-        }
-
-        // return true to not remove the handler from Strophe
-        return true;
-    }
-
-    /**
-     * Removes entry from this.jidToVersion map.
-     * @param {String} jid the jid to be removed.
-     */
-    _removeJidToVersionEntry(jid) {
-        if (jid in this.jidToVersion) {
-            delete this.jidToVersion[jid];
-        }
     }
 }

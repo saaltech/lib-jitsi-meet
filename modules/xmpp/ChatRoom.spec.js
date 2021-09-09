@@ -138,7 +138,8 @@ describe('ChatRoom', () => {
 
         beforeEach(() => {
             const xmpp = {
-                options: {}
+                options: {},
+                addListener: () => {} // eslint-disable-line no-empty-function
             };
 
             room = new ChatRoom(
@@ -175,7 +176,9 @@ describe('ChatRoom', () => {
                 'status-text',
                 undefined,
                 undefined,
-                'fulljid'
+                'fulljid',
+                undefined, // features
+                0 // isReplaceParticipant
             ]);
         });
 
@@ -204,7 +207,40 @@ describe('ChatRoom', () => {
                 undefined,
                 undefined,
                 undefined,
-                'jid=attr');
+                'jid=attr',
+                undefined, // features
+                0); // isReplaceParticipant
+        });
+
+        it('parses muc user replacing other user correctly', () => {
+            const presStr = '' +
+              '<presence to="tojid" from="fromjid">' +
+                  '<x xmlns="http://jabber.org/protocol/muc#user">' +
+                      '<item jid="jid=attr" affiliation="affiliation-attr" role="role-attr"/>' +
+                  '</x>' +
+                  '<flip_device />' +
+              '</presence>';
+            const pres = new DOMParser().parseFromString(presStr, 'text/xml').documentElement;
+
+            room.onPresence(pres);
+            expect(emitterSpy.calls.count()).toEqual(2);
+            expect(emitterSpy.calls.argsFor(0)).toEqual([
+                XMPPEvents.PRESENCE_RECEIVED,
+                jasmine.any(Object)
+            ]);
+            expect(emitterSpy).toHaveBeenCalledWith(
+              XMPPEvents.MUC_MEMBER_JOINED,
+              'fromjid',
+              undefined, // nick
+              'role-attr', // role
+              jasmine.any(Boolean), // isHiddenDomain
+              undefined, // statsID
+              undefined,
+              undefined,
+              undefined,
+              'jid=attr',
+              undefined, // features
+              1); // isReplaceParticipant
         });
 
         it('parses identity correctly', () => {
@@ -250,7 +286,9 @@ describe('ChatRoom', () => {
                 'status-text',
                 expectedIdentity,
                 undefined,
-                'fulljid'
+                'fulljid',
+                undefined, // features
+                0 // isReplaceParticipant
             ]);
         });
 
@@ -282,10 +320,61 @@ describe('ChatRoom', () => {
                 'status-text',
                 undefined,
                 expectedBotType,
-                'fulljid'
+                'fulljid',
+                undefined, // features
+                0 // isReplaceParticipant
             ]);
         });
 
+    });
+
+    describe('sendMessage', () => {
+        let room;
+        let connectionSpy;
+
+        beforeEach(() => {
+            const xmpp = {
+                options: {},
+                addListener: () => {} // eslint-disable-line no-empty-function
+            };
+
+            room = new ChatRoom(
+                // eslint-disable-next-line no-empty-function
+                { send: () => {} } /* connection */,
+                'jid',
+                'password',
+                xmpp,
+                {} /* options */);
+            connectionSpy = spyOn(room.connection, 'send');
+        });
+        it('sends a string msg with elementName body correctly', () => {
+            room.sendMessage('string message', 'body', 'receiver');
+            expect(connectionSpy.calls.argsFor(0).toString()).toBe(
+                '<message to="jid" type="groupchat" xmlns="jabber:client">' +
+                '<body>string message</body>' +
+                '</message>');
+        });
+        it('sends a object msg with elementName body correctly', () => {
+            room.sendMessage({ object: 'message' }, 'body', 'receiver');
+            expect(connectionSpy.calls.argsFor(0).toString()).toBe(
+                '<message to="jid" type="groupchat" xmlns="jabber:client">' +
+                '<body object="message"/>' +
+                '</message>');
+        });
+        it('sends a string msg with elementName json-message correctly', () => {
+            room.sendMessage('string message', 'json-message', 'receiver');
+            expect(connectionSpy.calls.argsFor(0).toString()).toBe(
+                '<message to="jid" type="groupchat" xmlns="jabber:client">' +
+                '<json-message xmlns="http://jitsi.org/jitmeet">string message</json-message>' +
+                '</message>');
+        });
+        it('sends a object msg with elementName json-message correctly', () => {
+            room.sendMessage({ object: 'message' }, 'json-message', 'receiver');
+            expect(connectionSpy.calls.argsFor(0).toString()).toBe(
+                '<message to="jid" type="groupchat" xmlns="jabber:client">' +
+                '<json-message object="message" xmlns="http://jitsi.org/jitmeet"/>' +
+                '</message>');
+        });
     });
 });
 
